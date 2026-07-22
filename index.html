@@ -58,8 +58,9 @@
 <body><div class="wrap">
   <div class="head">
     <h1>RD부 통합링크 · 클릭 통계</h1>
-    <span class="updated">업데이트 2026-07-22 05:24</span>
+    <span class="updated" id="upd">불러오는 중…</span>
   </div>
+  <div id="err" style="display:none;color:#b23b32;font-size:13px;margin:-8px 0 14px"></div>
 
   <div class="periods">
     <button class="pbtn" data-days="1">오늘</button>
@@ -91,12 +92,38 @@
 
   <div class="foot">
     RD부 통합링크 클릭 자동 집계 · 데이터 출처 GoatCounter<br>
-    같은 사람이 하루에 같은 링크를 여러 번 눌러도 1로 셉니다(중복 제거) · 담당자가 새로고침하면 갱신
+    같은 사람이 하루에 같은 링크를 여러 번 눌러도 1로 셉니다(중복 제거) · 30초마다 실시간 자동 갱신
   </div>
 </div>
 
 <script>
-const DATA = {"hub": {"2026-07-22": 2}, "links": [{"name": "이미지 JPG 변환기", "days": {"2026-07-22": 2}}, {"name": "설문지 빈박스 제거", "days": {"2026-07-22": 1}}]};
+const TOKEN = '1ns8q9nlwwq6f1mc41bjxft2qe99q8nrbgsp5j1vjrivutnwfg4';
+const API = 'https://cyhhohoho.goatcounter.com/api/v0';
+const DATA = { hub:{}, links:[] };
+function sumAll(o){ let t=0; for(const k in o) t+=o[k]; return t; }
+async function loadData(){
+  const t=new Date(); const tomo=new Date(t.getTime()+86400000);
+  const url=API+'/stats/hits?start=2026-01-01&end='+ymd(tomo)+'&daily=true&limit=100';
+  const res=await fetch(url,{headers:{'Authorization':'Bearer '+TOKEN}});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const j=await res.json();
+  const hub={}, lm={};
+  (j.hits||[]).forEach(h=>{
+    const p=h.path||'';
+    const isClick=h.event||p.indexOf('click/')===0||p.indexOf('/click/')===0;
+    const dm={};
+    (h.stats||[]).forEach(s=>{ if(s.daily) dm[s.day]=(dm[s.day]||0)+s.daily; });
+    if(isClick){
+      const name=h.title||p.split('click/').pop().replace(/^\//,'');
+      lm[name]=lm[name]||{};
+      for(const d in dm) lm[name][d]=(lm[name][d]||0)+dm[d];
+    } else if(p.indexOf('total_URL')>=0){
+      for(const d in dm) hub[d]=(hub[d]||0)+dm[d];
+    }
+  });
+  DATA.hub=hub;
+  DATA.links=Object.keys(lm).map(name=>({name,days:lm[name]})).sort((a,b)=>sumAll(b.days)-sumAll(a.days));
+}
 const PALETTE = ['#0f766e','#0d9488','#14b8a6','#2dd4bf','#5eead4','#0e7490','#0891b2','#06b6d4','#22d3ee','#67e8f9'];
 
 // 날짜는 전부 '로컬 달력 기준 YYYY-MM-DD' 문자열로만 다룬다(UTC 변환으로 하루 밀리는 것 방지).
@@ -204,6 +231,15 @@ document.getElementById('applyBtn').addEventListener('click',()=>{
   setActive(document.getElementById('applyBtn')); render();
 });
 
-render();
+function stamp(){
+  const n=new Date();
+  document.getElementById('upd').textContent='실시간 · '+n.getFullYear()+'-'+pad(n.getMonth()+1)+'-'+pad(n.getDate())+' '+pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds());
+}
+async function refresh(){
+  try{ await loadData(); render(); stamp(); document.getElementById('err').style.display='none'; }
+  catch(e){ const el=document.getElementById('err'); el.style.display='block'; el.textContent='통계를 불러오지 못했습니다: '+e.message; }
+}
+refresh();
+setInterval(refresh, 30000);
 </script>
 </body></html>
