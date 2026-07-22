@@ -64,9 +64,9 @@
 
   <div class="periods">
     <button class="pbtn" data-days="1">오늘</button>
-    <button class="pbtn" data-days="7">최근 7일</button>
+    <button class="pbtn on" data-days="7">최근 7일</button>
     <button class="pbtn" data-days="30">최근 30일</button>
-    <button class="pbtn on" data-days="0">전체</button>
+    <button class="pbtn" data-days="0">전체</button>
     <span class="rangebox">
       <input type="date" id="fromD" class="dinput">
       <span class="tilde">~</span>
@@ -132,7 +132,7 @@ function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDat
 function todayLocal(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
 
 // filter: {days:N}  (N=0 전체, 1 오늘, 7/30 최근N일)  또는  {from:'YYYY-MM-DD', to:'YYYY-MM-DD'}
-let filter = {days:0};
+let filter = {days:7};
 
 function rangeOf(f){
   // {from:Date, to:Date} 반환. 전체(days:0, 범위없음)면 null.
