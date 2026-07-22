@@ -21,6 +21,10 @@
         cursor:pointer;transition:.15s}
   .pbtn:hover{border-color:var(--teal2)}
   .pbtn.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+  .rangebox{display:inline-flex;align-items:center;gap:6px;margin-left:4px}
+  .dinput{border:1px solid var(--border);border-radius:8px;padding:7px 9px;font-family:inherit;
+          font-size:13px;color:var(--text);background:var(--surface)}
+  .tilde{color:var(--muted)}
   .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
   .stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px}
   .stat .k{font-size:12px;color:var(--muted);margin-bottom:6px}
@@ -54,13 +58,20 @@
 <body><div class="wrap">
   <div class="head">
     <h1>RD부 통합링크 · 클릭 통계</h1>
-    <span class="updated">업데이트 2026-07-22 14:01</span>
+    <span class="updated">업데이트 2026-07-22 14:13</span>
   </div>
 
   <div class="periods">
+    <button class="pbtn" data-days="1">오늘</button>
     <button class="pbtn" data-days="7">최근 7일</button>
     <button class="pbtn" data-days="30">최근 30일</button>
     <button class="pbtn on" data-days="0">전체</button>
+    <span class="rangebox">
+      <input type="date" id="fromD" class="dinput">
+      <span class="tilde">~</span>
+      <input type="date" id="toD" class="dinput">
+      <button class="pbtn apply" id="applyBtn">적용</button>
+    </span>
   </div>
 
   <div class="cards">
@@ -92,40 +103,56 @@ const PALETTE = ['#0f766e','#0d9488','#14b8a6','#2dd4bf','#5eead4','#0e7490','#0
 function pad(n){ return String(n).padStart(2,'0'); }
 function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
 function todayLocal(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
-function inRange(day, days){
-  if(days===0) return true;
-  const today = todayLocal();
-  const from = new Date(today); from.setDate(from.getDate()-(days-1));
-  const d = new Date(day+'T00:00:00');   // 로컬 자정으로 파싱
-  return d>=from && d<=today;
-}
-function sumDays(map, days){
-  let t=0; for(const k in map){ if(inRange(k,days)) t+=map[k]; } return t;
-}
-// 기간 내 일자 라벨 목록(추이용)
-function dayList(days){
+
+// filter: {days:N}  (N=0 전체, 1 오늘, 7/30 최근N일)  또는  {from:'YYYY-MM-DD', to:'YYYY-MM-DD'}
+let filter = {days:0};
+
+function rangeOf(f){
+  // {from:Date, to:Date} 반환. 전체(days:0, 범위없음)면 null.
+  if(f.from) return {from:new Date(f.from+'T00:00:00'), to:new Date(f.to+'T00:00:00')};
+  if(f.days===0) return null;
   const today=todayLocal();
-  let span = days===0 ? 30 : days;   // 전체는 최근 30일 추이로 표시
-  const out=[];
-  for(let i=span-1;i>=0;i--){ const d=new Date(today); d.setDate(d.getDate()-i); out.push(ymd(d)); }
+  const from=new Date(today); from.setDate(from.getDate()-(f.days-1));
+  return {from, to:today};
+}
+function inFilter(day, f){
+  const r=rangeOf(f);
+  if(!r) return true;
+  const d=new Date(day+'T00:00:00');
+  return d>=r.from && d<=r.to;
+}
+function sumDays(map, f){ let t=0; for(const k in map){ if(inFilter(k,f)) t+=map[k]; } return t; }
+
+// 추이(막대)용 일자 목록
+function dayListF(f){
+  let from, to;
+  const r=rangeOf(f);
+  if(!r){ to=todayLocal(); from=new Date(to); from.setDate(from.getDate()-29); }   // 전체 → 최근 30일 추이
+  else { from=new Date(r.from); to=new Date(r.to); }
+  const out=[]; const d=new Date(from); let g=0;
+  while(d<=to && g<400){ out.push(ymd(d)); d.setDate(d.getDate()+1); g++; }
   return out;
 }
-function trendTotals(days){
-  const list=dayList(days);
-  return list.map(day=>{
+function trendTotals(f){
+  return dayListF(f).map(day=>{
     let t=0; DATA.links.forEach(l=>{ t+=(l.days[day]||0); });
     return {day, val:t};
   });
 }
+function labelOf(f){
+  if(f.from) return f.from+' ~ '+f.to;
+  if(f.days===1) return '오늘';
+  if(f.days===0) return '전체';
+  return '최근 '+f.days+'일';
+}
 
-function render(days){
-  document.querySelectorAll('.pbtn').forEach(b=>b.classList.toggle('on', +b.dataset.days===days));
-  const plabel = days===0?'(전체)':('(최근 '+days+'일)');
+function render(){
+  const plabel='('+labelOf(filter)+')';
   pl1.textContent=plabel; pl2.textContent=plabel; pl3.textContent=plabel;
 
   // 카드
-  const hub = sumDays(DATA.hub, days);
-  const rows = DATA.links.map(l=>({name:l.name, cnt:sumDays(l.days, days)})).filter(r=>r.cnt>0);
+  const hub = sumDays(DATA.hub, filter);
+  const rows = DATA.links.map(l=>({name:l.name, cnt:sumDays(l.days, filter)})).filter(r=>r.cnt>0);
   rows.sort((a,b)=>b.cnt-a.cnt);
   const totalClicks = rows.reduce((s,r)=>s+r.cnt,0);
   hubv.textContent = hub.toLocaleString();
@@ -143,7 +170,7 @@ function render(days){
   }).join('') : '<div class="empty">이 기간에는 클릭 데이터가 없습니다.</div>';
 
   // 일자별 추이
-  const tr=trendTotals(days);
+  const tr=trendTotals(filter);
   const tmax=Math.max(1, ...tr.map(t=>t.val));
   const step=Math.max(1, Math.ceil(tr.length/8));   // x축 라벨은 약 8개만(겹침 방지)
   trend.innerHTML = tr.map((t,i)=>{
@@ -155,7 +182,28 @@ function render(days){
   }).join('');
 }
 
-document.querySelectorAll('.pbtn').forEach(b=>b.addEventListener('click',()=>render(+b.dataset.days)));
-render(0);
+function setActive(el){ document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('on')); if(el) el.classList.add('on'); }
+
+// 빠른 버튼(오늘/최근7일/최근30일/전체)
+document.querySelectorAll('.pbtn[data-days]').forEach(b=>b.addEventListener('click',()=>{
+  filter={days:+b.dataset.days};
+  fromD.value=''; toD.value='';
+  setActive(b); render();
+}));
+
+// 날짜 직접 지정
+const fromD=document.getElementById('fromD'), toD=document.getElementById('toD');
+const maxday=ymd(todayLocal());
+fromD.max=maxday; toD.max=maxday;
+document.getElementById('applyBtn').addEventListener('click',()=>{
+  let f=fromD.value, t=toD.value;
+  if(!f && !t) return;
+  if(!f) f=t; if(!t) t=f;            // 하나만 고르면 그 하루
+  if(f>t){ const x=f; f=t; t=x; fromD.value=f; toD.value=t; }
+  filter={from:f, to:t};
+  setActive(document.getElementById('applyBtn')); render();
+});
+
+render();
 </script>
 </body></html>
