@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RD부 통합링크 · 통계</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --teal:#0f766e; --bg:#f6f7f6; --surface:#fff; --border:#e5e7eb;
+          --text:#1f2937; --muted:#6b7280; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+        font-family:'Noto Sans KR',system-ui,sans-serif;padding:40px 20px}
+  .wrap{max-width:760px;margin:0 auto}
+  .head{display:flex;align-items:baseline;justify-content:space-between;
+         flex-wrap:wrap;gap:8px;margin-bottom:24px}
+  h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.3px}
+  .updated{font-size:12px;color:var(--muted)}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:26px}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+         padding:18px 20px}
+  .stat .k{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .stat .v{font-size:30px;font-weight:700;color:var(--teal);letter-spacing:-.5px}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+          padding:22px 24px}
+  .panel h2{font-size:15px;font-weight:700;margin:0 0 18px}
+  .bar-row{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+  .bar-label{width:170px;flex:0 0 170px;font-size:13px;font-weight:500;
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar-track{position:relative;flex:1;height:26px;background:#f1f3f2;
+              border-radius:7px;overflow:hidden;display:flex;align-items:center}
+  .bar-fill{height:100%;border-radius:7px;transition:width .4s}
+  .bar-val{position:absolute;right:10px;font-size:12px;font-weight:700;color:#374151}
+  .bar-share{font-weight:400;color:var(--muted);margin-left:4px}
+  .empty{color:var(--muted);font-size:14px;padding:20px 0;text-align:center}
+  .foot{margin-top:22px;font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
+</style></head>
+<body><div class="wrap">
+  <div class="head">
+    <h1>RD부 통합링크 · 클릭 통계</h1>
+    <span class="updated">업데이트 2026-07-22 13:44</span>
+  </div>
+  <div class="cards">
+    <div class="stat"><div class="k">허브 총 방문수</div><div class="v">1</div></div>
+    <div class="stat"><div class="k">총 링크 클릭수</div><div class="v">2</div></div>
+  </div>
+  <div class="panel">
+    <h2>링크별 클릭수</h2>
+    
+      <div class="bar-row">
+        <div class="bar-label" title="설문지 빈박스 제거">설문지 빈박스 제거</div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:100.0%;background:#0f766e"></div>
+          <span class="bar-val">1<span class="bar-share">· 50%</span></span>
+        </div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label" title="이미지 JPG 변환기">이미지 JPG 변환기</div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:100.0%;background:#0d9488"></div>
+          <span class="bar-val">1<span class="bar-share">· 50%</span></span>
+        </div>
+      </div>
+  </div>
+  <div class="foot">
+    RD부 통합링크 클릭 자동 집계 · 데이터 출처 GoatCounter<br>
+    업데이트 2026-07-22 13:44 기준 · 담당자가 새로고침하면 최신 수치로 갱신됩니다.
+  </div>
+</div></body></html>
