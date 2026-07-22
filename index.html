@@ -38,8 +38,8 @@
   .bar-share{font-weight:400;color:var(--muted);margin-left:4px}
   .empty{color:var(--muted);font-size:14px;padding:20px 0;text-align:center}
   /* 일자별 추이 */
-  .trend{display:flex;align-items:flex-end;gap:6px;height:120px;padding-top:8px;overflow-x:auto}
-  .tcol{flex:1 0 18px;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:18px}
+  .trend{display:flex;align-items:flex-end;gap:3px;height:120px;padding-top:8px}
+  .tcol{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px}
   .tbar-wrap{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
   .tbar{width:70%;max-width:26px;background:var(--teal2);border-radius:4px 4px 0 0;min-height:2px;
         position:relative;transition:.3s}
@@ -54,7 +54,7 @@
 <body><div class="wrap">
   <div class="head">
     <h1>RD부 통합링크 · 클릭 통계</h1>
-    <span class="updated">업데이트 2026-07-22 13:57</span>
+    <span class="updated">업데이트 2026-07-22 14:00</span>
   </div>
 
   <div class="periods">
@@ -145,11 +145,13 @@ function render(days){
   // 일자별 추이
   const tr=trendTotals(days);
   const tmax=Math.max(1, ...tr.map(t=>t.val));
-  trend.innerHTML = tr.map(t=>{
+  const step=Math.max(1, Math.ceil(tr.length/8));   // x축 라벨은 약 8개만(겹침 방지)
+  trend.innerHTML = tr.map((t,i)=>{
     const h=(t.val/tmax*100);
     const md=t.day.slice(5).replace('-','/');
+    const lab=(i%step===0 || i===tr.length-1) ? md : '';
     return `<div class="tcol"><div class="tbar-wrap"><div class="tbar" style="height:${h}%">
-      <span class="tip">${md} · ${t.val}회</span></div></div><span class="tlab">${md}</span></div>`;
+      <span class="tip">${md} · ${t.val}회</span></div></div><span class="tlab">${lab}</span></div>`;
   }).join('');
 }
 
