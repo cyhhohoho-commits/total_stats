@@ -1,0 +1,299 @@
+# -*- coding: utf-8 -*-
+"""
+RD부 통합링크 통계 - GitHub Actions 자동 빌드용.
+GoatCounter API 토큰은 환경변수 GOATCOUNTER_TOKEN(리포 Secret)에서 읽는다.
+index.html 을 생성만 한다(커밋/푸시는 워크플로가 담당).
+로컬 수동 도구는 통계보기.py 가 그대로 별도로 존재한다.
+"""
+import os, sys, json, urllib.request, urllib.error
+from datetime import datetime, date, timedelta
+
+CODE = 'cyhhohoho'
+API = f'https://{CODE}.goatcounter.com/api/v0'
+HUB_PATH_HINT = 'total_URL'
+
+
+def die(msg):
+    print('[오류] ' + msg)
+    sys.exit(1)
+
+
+def api_get(path, token, params=None):
+    url = API + path
+    if params:
+        from urllib.parse import urlencode
+        url += '?' + urlencode(params)
+    req = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + token})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode('utf-8'))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', 'replace')
+        die(f"API 요청 실패 ({e.code}). 토큰/권한(Read statistics)을 확인하세요.\n  응답: {body[:300]}")
+    except Exception as e:
+        die(f"네트워크 오류: {e}")
+
+
+def fetch_daily(token):
+    """링크별·허브 일자별 카운트를 가져온다.
+       반환: (hub_days{일자:수}, links{이름:{일자:수}})"""
+    start = '2026-01-01'
+    end = (date.today() + timedelta(days=1)).isoformat()
+    data = api_get('/stats/hits', token, {'start': start, 'end': end, 'limit': 100, 'daily': 'true'})
+    hub_days, links = {}, {}
+    for h in data.get('hits', data.get('stats', [])):
+        p = h.get('path', '')
+        is_click = bool(h.get('event')) or p.startswith('click/') or p.startswith('/click/')
+        daymap = {}
+        for s in h.get('stats', []):
+            c = int(s.get('daily') or 0)
+            if c:
+                daymap[s['day']] = c
+        if is_click:
+            name = h.get('title') or p.split('click/', 1)[-1].lstrip('/')
+            agg = links.setdefault(name, {})
+            for d, c in daymap.items():
+                agg[d] = agg.get(d, 0) + c
+        elif HUB_PATH_HINT in p:
+            for d, c in daymap.items():
+                hub_days[d] = hub_days.get(d, 0) + c
+    return hub_days, links
+
+
+HTML_TEMPLATE = r'''<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RD부 통합링크 · 통계</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --teal:#0f766e; --teal2:#14b8a6; --bg:#f6f7f6; --surface:#fff; --border:#e5e7eb;
+         --text:#1f2937; --muted:#6b7280; --track:#f1f3f2; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:'Noto Sans KR',system-ui,sans-serif;padding:40px 20px}
+  .wrap{max-width:760px;margin:0 auto}
+  .head{display:flex;align-items:baseline;justify-content:space-between;
+        flex-wrap:wrap;gap:8px;margin-bottom:18px}
+  h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.3px}
+  .updated{font-size:12px;color:var(--muted)}
+  .periods{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+  .pbtn{border:1px solid var(--border);background:var(--surface);color:var(--muted);
+        font-family:inherit;font-size:13px;font-weight:500;padding:8px 16px;border-radius:9px;
+        cursor:pointer;transition:.15s}
+  .pbtn:hover{border-color:var(--teal2)}
+  .pbtn.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+  .rangebox{display:inline-flex;align-items:center;gap:6px;margin-left:4px}
+  .dinput{border:1px solid var(--border);border-radius:8px;padding:7px 9px;font-family:inherit;
+          font-size:13px;color:var(--text);background:var(--surface)}
+  .tilde{color:var(--muted)}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px}
+  .stat .k{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .stat .v{font-size:30px;font-weight:700;color:var(--teal);letter-spacing:-.5px}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+         padding:22px 24px;margin-bottom:20px}
+  .panel h2{font-size:15px;font-weight:700;margin:0 0 18px}
+  .bar-row{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+  .bar-label{width:170px;flex:0 0 170px;font-size:13px;font-weight:500;
+             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar-track{position:relative;flex:1;height:26px;background:var(--track);
+             border-radius:7px;overflow:hidden;display:flex;align-items:center}
+  .bar-fill{height:100%;border-radius:7px;transition:width .4s}
+  .bar-val{position:absolute;right:10px;font-size:12px;font-weight:700;color:#374151}
+  .bar-share{font-weight:400;color:var(--muted);margin-left:4px}
+  .empty{color:var(--muted);font-size:14px;padding:20px 0;text-align:center}
+  /* 일자별 추이 */
+  .trend{display:flex;align-items:stretch;gap:3px;height:120px;padding-top:8px}
+  .tcol{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .tbar-wrap{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
+  .tbar{width:70%;max-width:26px;background:var(--teal2);border-radius:4px 4px 0 0;min-height:2px;
+        position:relative;transition:.3s}
+  .tbar:hover{background:var(--teal)}
+  .tbar .tip{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);
+             background:#111;color:#fff;font-size:11px;padding:3px 7px;border-radius:5px;
+             white-space:nowrap;opacity:0;pointer-events:none;transition:.15s;margin-bottom:4px}
+  .tbar:hover .tip{opacity:1}
+  .tlab{font-size:10px;color:var(--muted);white-space:nowrap}
+  .foot{margin-top:6px;font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
+</style></head>
+<body><div class="wrap">
+  <div class="head">
+    <h1>RD부 통합링크 · 클릭 통계</h1>
+    <span class="updated">업데이트 __NOW__</span>
+  </div>
+
+  <div class="periods">
+    <button class="pbtn" data-days="1">오늘</button>
+    <button class="pbtn" data-days="7">최근 7일</button>
+    <button class="pbtn" data-days="30">최근 30일</button>
+    <button class="pbtn on" data-days="0">전체</button>
+    <span class="rangebox">
+      <input type="date" id="fromD" class="dinput">
+      <span class="tilde">~</span>
+      <input type="date" id="toD" class="dinput">
+      <button class="pbtn apply" id="applyBtn">적용</button>
+    </span>
+  </div>
+
+  <div class="cards">
+    <div class="stat"><div class="k">허브 방문수 <span id="pl1"></span></div><div class="v" id="hubv">0</div></div>
+    <div class="stat"><div class="k">링크 클릭수 <span id="pl2"></span></div><div class="v" id="clkv">0</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>일자별 추이 <span style="font-weight:400;color:var(--muted);font-size:12px">(링크 클릭 합계)</span></h2>
+    <div class="trend" id="trend"></div>
+  </div>
+
+  <div class="panel">
+    <h2>링크별 클릭수 <span id="pl3" style="font-weight:400;color:var(--muted);font-size:12px"></span></h2>
+    <div id="ranking"></div>
+  </div>
+
+  <div class="foot">
+    RD부 통합링크 클릭 자동 집계 · 데이터 출처 GoatCounter<br>
+    같은 사람이 하루에 같은 링크를 여러 번 눌러도 1로 셉니다(중복 제거) · 담당자가 새로고침하면 갱신
+  </div>
+</div>
+
+<script>
+const DATA = __DATA__;
+const PALETTE = ['#0f766e','#0d9488','#14b8a6','#2dd4bf','#5eead4','#0e7490','#0891b2','#06b6d4','#22d3ee','#67e8f9'];
+
+// 날짜는 전부 '로컬 달력 기준 YYYY-MM-DD' 문자열로만 다룬다(UTC 변환으로 하루 밀리는 것 방지).
+function pad(n){ return String(n).padStart(2,'0'); }
+function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function todayLocal(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
+
+// filter: {days:N}  (N=0 전체, 1 오늘, 7/30 최근N일)  또는  {from:'YYYY-MM-DD', to:'YYYY-MM-DD'}
+let filter = {days:0};
+
+function rangeOf(f){
+  // {from:Date, to:Date} 반환. 전체(days:0, 범위없음)면 null.
+  if(f.from) return {from:new Date(f.from+'T00:00:00'), to:new Date(f.to+'T00:00:00')};
+  if(f.days===0) return null;
+  const today=todayLocal();
+  const from=new Date(today); from.setDate(from.getDate()-(f.days-1));
+  return {from, to:today};
+}
+function inFilter(day, f){
+  const r=rangeOf(f);
+  if(!r) return true;
+  const d=new Date(day+'T00:00:00');
+  return d>=r.from && d<=r.to;
+}
+function sumDays(map, f){ let t=0; for(const k in map){ if(inFilter(k,f)) t+=map[k]; } return t; }
+
+// 추이(막대)용 일자 목록
+function dayListF(f){
+  let from, to;
+  const r=rangeOf(f);
+  if(!r){ to=todayLocal(); from=new Date(to); from.setDate(from.getDate()-29); }   // 전체 → 최근 30일 추이
+  else { from=new Date(r.from); to=new Date(r.to); }
+  const out=[]; const d=new Date(from); let g=0;
+  while(d<=to && g<400){ out.push(ymd(d)); d.setDate(d.getDate()+1); g++; }
+  return out;
+}
+function trendTotals(f){
+  return dayListF(f).map(day=>{
+    let t=0; DATA.links.forEach(l=>{ t+=(l.days[day]||0); });
+    return {day, val:t};
+  });
+}
+function labelOf(f){
+  if(f.from) return f.from+' ~ '+f.to;
+  if(f.days===1) return '오늘';
+  if(f.days===0) return '전체';
+  return '최근 '+f.days+'일';
+}
+
+function render(){
+  const plabel='('+labelOf(filter)+')';
+  pl1.textContent=plabel; pl2.textContent=plabel; pl3.textContent=plabel;
+
+  // 카드
+  const hub = sumDays(DATA.hub, filter);
+  const rows = DATA.links.map(l=>({name:l.name, cnt:sumDays(l.days, filter)})).filter(r=>r.cnt>0);
+  rows.sort((a,b)=>b.cnt-a.cnt);
+  const totalClicks = rows.reduce((s,r)=>s+r.cnt,0);
+  hubv.textContent = hub.toLocaleString();
+  clkv.textContent = totalClicks.toLocaleString();
+
+  // 링크별 막대
+  const maxc = Math.max(1, ...rows.map(r=>r.cnt));
+  ranking.innerHTML = rows.length ? rows.map((r,i)=>{
+    const pct=(r.cnt/maxc*100).toFixed(1);
+    const share=totalClicks?Math.round(r.cnt/totalClicks*100):0;
+    const color=PALETTE[i%PALETTE.length];
+    return `<div class="bar-row"><div class="bar-label" title="${r.name}">${r.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div>
+      <span class="bar-val">${r.cnt.toLocaleString()}<span class="bar-share">· ${share}%</span></span></div></div>`;
+  }).join('') : '<div class="empty">이 기간에는 클릭 데이터가 없습니다.</div>';
+
+  // 일자별 추이
+  const tr=trendTotals(filter);
+  const tmax=Math.max(1, ...tr.map(t=>t.val));
+  const step=Math.max(1, Math.ceil(tr.length/8));   // x축 라벨은 약 8개만(겹침 방지)
+  trend.innerHTML = tr.map((t,i)=>{
+    const h=(t.val/tmax*100);
+    const md=t.day.slice(5).replace('-','/');
+    const lab=(i%step===0 || i===tr.length-1) ? md : '';
+    return `<div class="tcol"><div class="tbar-wrap"><div class="tbar" style="height:${h}%">
+      <span class="tip">${md} · ${t.val}회</span></div></div><span class="tlab">${lab}</span></div>`;
+  }).join('');
+}
+
+function setActive(el){ document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('on')); if(el) el.classList.add('on'); }
+
+// 빠른 버튼(오늘/최근7일/최근30일/전체)
+document.querySelectorAll('.pbtn[data-days]').forEach(b=>b.addEventListener('click',()=>{
+  filter={days:+b.dataset.days};
+  fromD.value=''; toD.value='';
+  setActive(b); render();
+}));
+
+// 날짜 직접 지정
+const fromD=document.getElementById('fromD'), toD=document.getElementById('toD');
+const maxday=ymd(todayLocal());
+fromD.max=maxday; toD.max=maxday;
+document.getElementById('applyBtn').addEventListener('click',()=>{
+  let f=fromD.value, t=toD.value;
+  if(!f && !t) return;
+  if(!f) f=t; if(!t) t=f;            // 하나만 고르면 그 하루
+  if(f>t){ const x=f; f=t; t=x; fromD.value=f; toD.value=t; }
+  filter={from:f, to:t};
+  setActive(document.getElementById('applyBtn')); render();
+});
+
+render();
+</script>
+</body></html>'''
+
+
+def build_html(hub_days, links):
+    now = datetime.now().strftime('%Y-%m-%d %H:%M')
+    data = {
+        'hub': hub_days,
+        'links': [{'name': n, 'days': d} for n, d in
+                  sorted(links.items(), key=lambda x: -sum(x[1].values()))],
+    }
+    return (HTML_TEMPLATE
+            .replace('__NOW__', now)
+            .replace('__DATA__', json.dumps(data, ensure_ascii=False)))
+
+
+def main():
+    token = os.environ.get('GOATCOUNTER_TOKEN', '').strip()
+    if not token:
+        die('GOATCOUNTER_TOKEN 환경변수(Secret)가 비어 있습니다.')
+    hub_days, links = fetch_daily(token)
+    html = build_html(hub_days, links)
+    with open('index.html', 'w', encoding='utf-8') as f:
+        f.write(html)
+    total_clicks = sum(sum(d.values()) for d in links.values())
+    print(f'index.html 생성 완료 (허브 {sum(hub_days.values())}, 클릭 {total_clicks})')
+
+
+if __name__ == '__main__':
+    main()
